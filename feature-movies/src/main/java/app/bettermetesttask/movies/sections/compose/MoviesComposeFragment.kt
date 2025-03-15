@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -79,7 +80,9 @@ class MoviesComposeFragment : Fragment(), Injectable {
                 MoviesComposeScreen(
                     moviesState = viewState,
                     likeMovie = viewModel::likeMovie,
-                    onErrorShown = viewModel::dismissError
+                    onErrorShown = viewModel::dismissError,
+                    onShowMovieDetails = viewModel::openMovieDetails,
+                    onHideMovieDetails = viewModel::hideMovieDetails,
                 )
             }
         }
@@ -91,7 +94,19 @@ private fun MoviesComposeScreen(
     moviesState: MoviesState,
     likeMovie: (Movie) -> Unit,
     onErrorShown: () -> Unit = {},
+    onShowMovieDetails: (Movie) -> Unit = {},
+    onHideMovieDetails: () -> Unit = {},
 ) {
+    if (moviesState is MoviesState.Loaded) {
+        moviesState.movieDetails?.let { movie ->
+            MovieDetailsDialog(
+                movie = movie,
+                onDismissRequest = onHideMovieDetails,
+                onLikeClicked = likeMovie
+            )
+        }
+    }
+
     val snackbarHostState = remember { SnackbarHostState() }
     Scaffold(
         modifier = Modifier
@@ -119,9 +134,8 @@ private fun MoviesComposeScreen(
                         items(moviesState.movies, key = { it.id }) { item ->
                             MovieItem(
                                 movie = item,
-                                onLikeClicked = {
-                                    likeMovie(item)
-                                }
+                                onLikeClicked = likeMovie,
+                                onShowMovieDetails = onShowMovieDetails
                             )
                         }
                     }
@@ -141,10 +155,11 @@ private fun MoviesComposeScreen(
 }
 
 @Composable
-fun MovieItem(movie: Movie, onLikeClicked: (Int) -> Unit) {
+fun MovieItem(movie: Movie, onLikeClicked: (Movie) -> Unit, onShowMovieDetails: (Movie) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onShowMovieDetails(movie) }
             .padding(8.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -173,7 +188,7 @@ fun MovieItem(movie: Movie, onLikeClicked: (Int) -> Unit) {
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            IconButton(onClick = { onLikeClicked(movie.id) }) {
+            IconButton(onClick = { onLikeClicked(movie) }) {
                 Icon(
                     imageVector = if (movie.liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Like Button",
@@ -191,10 +206,10 @@ private fun PreviewsMoviesComposeScreen() {
         moviesState = MoviesState.Loaded(
             List(20) { index ->
                 Movie(
-                    index,
-                    "Title $index",
-                    "Overview $index",
-                    null,
+                    id = index,
+                    title = "Title $index",
+                    description = "Overview $index",
+                    posterPath = null,
                     liked = index % 2 == 0,
                 )
             }

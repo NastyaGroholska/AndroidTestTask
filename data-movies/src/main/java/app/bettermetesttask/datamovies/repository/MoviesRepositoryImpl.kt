@@ -32,9 +32,7 @@ class MoviesRepositoryImpl @Inject constructor(
     override fun getMovie(id: Int): Flow<Movie?> =
         localStore.getMovie(id).map { with(mapper) { it?.toDomain() } }
 
-    override fun observeLikedMovieIds(): Flow<List<Int>> {
-        return localStore.observeLikedMoviesIds()
-    }
+    override fun observeLikedMovieIds(): Flow<List<Int>> = localStore.observeLikedMoviesIds()
 
     override suspend fun addMovieToFavorites(movieId: Int) {
         localStore.likeMovie(movieId)

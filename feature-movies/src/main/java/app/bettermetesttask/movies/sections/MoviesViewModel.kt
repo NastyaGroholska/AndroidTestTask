@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import app.bettermetesttask.domaincore.utils.Result
 import app.bettermetesttask.domainmovies.entries.Movie
 import app.bettermetesttask.domainmovies.interactors.AddMovieToFavoritesUseCase
+import app.bettermetesttask.domainmovies.interactors.GetMovieDetailsUseCase
 import app.bettermetesttask.domainmovies.interactors.ObserveMoviesUseCase
 import app.bettermetesttask.domainmovies.interactors.RemoveMovieFromFavoritesUseCase
 import app.bettermetesttask.domainmovies.interactors.UpdateMoviesUseCase
 import app.bettermetesttask.movies.sections.xml.MoviesAdapter
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,23 +23,32 @@ import javax.inject.Inject
 class MoviesViewModel @Inject constructor(
     observeMoviesUseCase: ObserveMoviesUseCase,
     private val updateMoviesUseCase: UpdateMoviesUseCase,
+    private val getMovieDetailsUseCase: GetMovieDetailsUseCase,
     private val likeMovieUseCase: AddMovieToFavoritesUseCase,
     private val dislikeMovieUseCase: RemoveMovieFromFavoritesUseCase,
     private val adapter: MoviesAdapter
 ) : ViewModel() {
     private val updateStatus: MutableStateFlow<UpdateState> =
         MutableStateFlow(UpdateState.NotRelevant)
+    private val movieDetails: MutableStateFlow<Movie?> = MutableStateFlow(null)
     private val moviesFlow = observeMoviesUseCase()
 
+    private var detailsUpdateJob: Job? = null
+
     val moviesStateFlow: StateFlow<MoviesState> =
-        moviesFlow.combine(updateStatus) { movies, updateStatus ->
+        combine(moviesFlow, updateStatus, movieDetails) { movies, updateStatus, movieDetails ->
             when (updateStatus) {
                 is UpdateState.Error -> MoviesState.Loaded(
                     movies = movies,
-                    error = updateStatus.error
+                    error = updateStatus.error,
+                    movieDetails = movieDetails
                 )
 
-                UpdateState.NotRelevant -> MoviesState.Loaded(movies = movies)
+                UpdateState.NotRelevant -> MoviesState.Loaded(
+                    movies = movies,
+                    movieDetails = movieDetails
+                )
+
                 UpdateState.Updating -> MoviesState.Loading
             }
         }.stateIn(viewModelScope, SharingStarted.Lazily, MoviesState.Initial)
@@ -79,6 +90,18 @@ class MoviesViewModel @Inject constructor(
     }
 
     fun openMovieDetails(movie: Movie) {
-        // TODO: todo todo todo todo
+        detailsUpdateJob?.cancel()
+        detailsUpdateJob = viewModelScope.launch {
+            getMovieDetailsUseCase(movie.id).collect { details ->
+                movieDetails.update { details }
+            }
+        }
+    }
+
+    fun hideMovieDetails() {
+        viewModelScope.launch {
+            detailsUpdateJob?.cancel()
+            movieDetails.update { null }
+        }
     }
 }

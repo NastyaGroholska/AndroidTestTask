@@ -8,5 +8,9 @@ sealed class MoviesState {
 
     data object Loading : MoviesState()
 
-    data class Loaded(val movies: List<Movie>, val error: Throwable? = null) : MoviesState()
+    data class Loaded(
+        val movies: List<Movie>,
+        val error: Throwable? = null,
+        val movieDetails: Movie? = null
+    ) : MoviesState()
 }
