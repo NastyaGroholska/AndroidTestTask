@@ -1,50 +1,79 @@
 package app.bettermetesttask.movies.sections
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import app.bettermetesttask.domaincore.utils.Result
 import app.bettermetesttask.domainmovies.entries.Movie
 import app.bettermetesttask.domainmovies.interactors.AddMovieToFavoritesUseCase
 import app.bettermetesttask.domainmovies.interactors.ObserveMoviesUseCase
 import app.bettermetesttask.domainmovies.interactors.RemoveMovieFromFavoritesUseCase
-import kotlinx.coroutines.GlobalScope
+import app.bettermetesttask.domainmovies.interactors.UpdateMoviesUseCase
+import app.bettermetesttask.movies.sections.xml.MoviesAdapter
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 class MoviesViewModel @Inject constructor(
-    private val observeMoviesUseCase: ObserveMoviesUseCase,
+    observeMoviesUseCase: ObserveMoviesUseCase,
+    private val updateMoviesUseCase: UpdateMoviesUseCase,
     private val likeMovieUseCase: AddMovieToFavoritesUseCase,
     private val dislikeMovieUseCase: RemoveMovieFromFavoritesUseCase,
     private val adapter: MoviesAdapter
 ) : ViewModel() {
+    private val updateStatus: MutableStateFlow<UpdateState> =
+        MutableStateFlow(UpdateState.NotRelevant)
+    private val moviesFlow = observeMoviesUseCase()
 
-    private val moviesMutableFlow: MutableStateFlow<MoviesState> = MutableStateFlow(MoviesState.Initial)
+    val moviesStateFlow: StateFlow<MoviesState> =
+        moviesFlow.combine(updateStatus) { movies, updateStatus ->
+            when (updateStatus) {
+                is UpdateState.Error -> MoviesState.Loaded(
+                    movies = movies,
+                    error = updateStatus.error
+                )
 
-    val moviesStateFlow: StateFlow<MoviesState>
-        get() = moviesMutableFlow.asStateFlow()
+                UpdateState.NotRelevant -> MoviesState.Loaded(movies = movies)
+                UpdateState.Updating -> MoviesState.Loading
+            }
+        }.stateIn(viewModelScope, SharingStarted.Lazily, MoviesState.Initial)
 
-    fun loadMovies() {
-        GlobalScope.launch {
-            observeMoviesUseCase()
-                .collect { result ->
-                    if (result is Result.Success) {
-                        moviesMutableFlow.emit(MoviesState.Loaded(result.data))
-                        adapter.submitList(result.data)
-                    }
-                }
+    init {
+        viewModelScope.launch {
+            moviesFlow.collect {
+                adapter.submitList(it)
+            }
+        }
+        updateMovies()
+    }
+
+    fun updateMovies() {
+        viewModelScope.launch {
+            if (updateStatus.value is UpdateState.Updating) return@launch
+            updateStatus.update { UpdateState.Updating }
+            when (val result = updateMoviesUseCase()) {
+                is Result.Error -> updateStatus.update { UpdateState.Error(result.error) }
+                is Result.Success<*> -> updateStatus.update { UpdateState.NotRelevant }
+            }
+        }
+    }
+
+    fun dismissError() {
+        viewModelScope.launch {
+            updateStatus.update { UpdateState.NotRelevant }
         }
     }
 
     fun likeMovie(movie: Movie) {
-        GlobalScope.launch {
+        viewModelScope.launch {
             if (movie.liked) {
-                likeMovieUseCase(movie.id)
-            } else {
                 dislikeMovieUseCase(movie.id)
+            } else {
+                likeMovieUseCase(movie.id)
             }
         }
     }

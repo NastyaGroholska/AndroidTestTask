@@ -1,4 +1,4 @@
-package app.bettermetesttask.movies.sections
+package app.bettermetesttask.movies.sections.xml
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -13,6 +13,8 @@ import app.bettermetesttask.featurecommon.utils.views.gone
 import app.bettermetesttask.featurecommon.utils.views.visible
 import app.bettermetesttask.movies.R
 import app.bettermetesttask.movies.databinding.MoviesFragmentBinding
+import app.bettermetesttask.movies.sections.MoviesState
+import app.bettermetesttask.movies.sections.MoviesViewModel
 import kotlinx.coroutines.Job
 import javax.inject.Inject
 import javax.inject.Provider
@@ -50,8 +52,6 @@ class MoviesFragment : Fragment(R.layout.movies_fragment), Injectable {
 
     override fun onResume() {
         super.onResume()
-
-        viewModel.loadMovies()
 
         job = lifecycleScope.launchWhenCreated {
             viewModel.moviesStateFlow.collect(::renderMoviesState)

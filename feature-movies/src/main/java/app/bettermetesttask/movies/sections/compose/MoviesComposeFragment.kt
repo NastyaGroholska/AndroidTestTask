@@ -25,10 +25,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.bettermetesttask.domainmovies.entries.Movie
 import app.bettermetesttask.featurecommon.injection.utils.Injectable
 import app.bettermetesttask.featurecommon.injection.viewmodel.SimpleViewModelProviderFactory
@@ -70,12 +75,12 @@ class MoviesComposeFragment : Fragment(), Injectable {
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
             )
             setContent {
-                val viewState by viewModel.moviesStateFlow.collectAsState()
-                MoviesComposeScreen(viewState, likeMovie = { movie ->
-                    viewModel.likeMovie(movie)
-                }, viewLoaded = {
-                    viewModel.loadMovies()
-                })
+                val viewState by viewModel.moviesStateFlow.collectAsStateWithLifecycle()
+                MoviesComposeScreen(
+                    moviesState = viewState,
+                    likeMovie = viewModel::likeMovie,
+                    onErrorShown = viewModel::dismissError
+                )
             }
         }
     }
@@ -85,32 +90,50 @@ class MoviesComposeFragment : Fragment(), Injectable {
 private fun MoviesComposeScreen(
     moviesState: MoviesState,
     likeMovie: (Movie) -> Unit,
-    viewLoaded: () -> Unit
+    onErrorShown: () -> Unit = {},
 ) {
-    viewLoaded()
-    Box(
+    val snackbarHostState = remember { SnackbarHostState() }
+    Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
-    ) {
-        when (moviesState) {
-            MoviesState.Initial -> {}
-            is MoviesState.Loaded -> {
-                LazyColumn {
-                    items(moviesState.movies) { item ->
-                        MovieItem(item, onLikeClicked = {
-                            likeMovie(item)
-                        })
+            .background(Color.White),
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (moviesState) {
+                MoviesState.Initial -> {}
+                is MoviesState.Loaded -> {
+                    moviesState.error?.let { error ->
+                        LaunchedEffect(error) {
+                            snackbarHostState.showSnackbar(error.message ?: "Error")
+                            onErrorShown()
+                        }
+                    }
+                    LazyColumn {
+                        items(moviesState.movies, key = { it.id }) { item ->
+                            MovieItem(
+                                movie = item,
+                                onLikeClicked = {
+                                    likeMovie(item)
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            MoviesState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+                MoviesState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
         }
@@ -164,15 +187,18 @@ fun MovieItem(movie: Movie, onLikeClicked: (Int) -> Unit) {
 @Composable
 @Preview(showBackground = true, backgroundColor = 0xFFFFFFFF)
 private fun PreviewsMoviesComposeScreen() {
-    MoviesComposeScreen(MoviesState.Loaded(
-        List(20) { index ->
-            Movie(
-                index,
-                "Title $index",
-                "Overview $index",
-                null,
-                liked = index % 2 == 0,
-            )
-        }
-    ), likeMovie = {}, viewLoaded = {})
+    MoviesComposeScreen(
+        moviesState = MoviesState.Loaded(
+            List(20) { index ->
+                Movie(
+                    index,
+                    "Title $index",
+                    "Overview $index",
+                    null,
+                    liked = index % 2 == 0,
+                )
+            }
+        ),
+        likeMovie = {}
+    )
 }

@@ -4,25 +4,33 @@ import app.bettermetesttask.datamovies.repository.stores.MoviesLocalStore
 import app.bettermetesttask.datamovies.repository.stores.MoviesMapper
 import app.bettermetesttask.datamovies.repository.stores.MoviesRestStore
 import app.bettermetesttask.domaincore.utils.Result
+import app.bettermetesttask.domaincore.utils.coroutines.AppDispatchers
 import app.bettermetesttask.domainmovies.entries.Movie
 import app.bettermetesttask.domainmovies.repository.MoviesRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class MoviesRepositoryImpl @Inject constructor(
     private val localStore: MoviesLocalStore,
-    private val mapper: MoviesMapper
+    private val mapper: MoviesMapper,
+    private val restStore: MoviesRestStore,
 ) : MoviesRepository {
 
-    private val restStore = MoviesRestStore()
-
-    override suspend fun getMovies(): Result<List<Movie>> {
-        TODO("Not yet implemented")
+    override suspend fun updateMovies(): Result<List<Movie>> = withContext(AppDispatchers.io()) {
+        val result = Result.of { restStore.getMovies() }
+        if (result is Result.Success<List<Movie>>) {
+            localStore.insertMovieList(result.data.map { mapper.mapToLocal(it) })
+        }
+        result
     }
 
-    override suspend fun getMovie(id: Int): Result<Movie> {
-        return Result.of { mapper.mapFromLocal(localStore.getMovie(id)) }
-    }
+    override fun getMovies(): Flow<List<Movie>> =
+        localStore.getMovies().map { list -> list.map { with(mapper) { it.toDomain() } } }
+
+    override fun getMovie(id: Int): Flow<Movie?> =
+        localStore.getMovie(id).map { with(mapper) { it?.toDomain() } }
 
     override fun observeLikedMovieIds(): Flow<List<Int>> {
         return localStore.observeLikedMoviesIds()
