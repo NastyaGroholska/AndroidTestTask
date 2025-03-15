@@ -1,7 +1,7 @@
 package app.bettermetesttask.movies.injection
 
 import app.bettermetesttask.featurecommon.injection.scopes.FragmentScope
-import app.bettermetesttask.movies.sections.MoviesFragment
+import app.bettermetesttask.movies.sections.xml.MoviesFragment
 import app.bettermetesttask.movies.sections.compose.MoviesComposeFragment
 import dagger.Module
 import dagger.android.ContributesAndroidInjector
